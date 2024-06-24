@@ -6,13 +6,91 @@ import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 import plotly.express as px
 import numpy as np
+import pandas_ta as ta
 
 import streamlit as st
 # import matplotlib.pyplot as plt
 
 import warnings
 warnings.filterwarnings('ignore')
+###############################################
+# DEFINICIONES
+###############################################
 
+# Algoritmo para detectar tendencias basado en EMAs (Average Exponential Moving).
+# EMAsignal es una lista que contiene señales de tendencia calculadas para cada fila en el DataFrame df.
+# Backcandles define el número de puntos que va a revisar aguas arriba y abajo del punto analizado para ver si se trata de:
+#
+# 0: No hay señal de tendencia definida.
+# 1: Señal de tendencia bajista.
+# 2: Señal de tendencia alcista.
+# 3: Señal de tendencia neutral o sin definir (ni alcista ni bajista).
+
+def trend_detection(df, backcandles):
+    df = df[df['volume'] != 0]
+    df.reset_index(drop=True, inplace=True)
+
+    df['EMA'] = ta.ema(df.close, length=50)
+    df.tail()
+
+    df = df[0:]
+    df.reset_index(drop=True, inplace=True)
+
+    EMAsignal = [0] * len(df)
+    for row in range(backcandles, len(df)):
+        upt = 1
+        dnt = 1
+        for i in range(row - backcandles, row + 1):
+            if max(df.open[i], df.close[i]) >= df.EMA[i]:
+                dnt = 0
+            if min(df.open[i], df.close[i]) <= df.EMA[i]:
+                upt = 0
+        if upt == 1 and dnt == 1:
+            EMAsignal[row] = 3
+        elif upt == 1:
+            EMAsignal[row] = 2
+        elif dnt == 1:
+            EMAsignal[row] = 1
+
+    df['EMASignal'] = EMAsignal
+    return df
+
+
+# Esta función isPivot es una función que detecta si una vela es un punto pivote o fractal en un conjunto de datos.
+# Recibe dos argumentos:
+# candle: El índice de la vela que se está considerando como un posible punto pivote.
+# window: El número de velas antes y después de la vela candle que se deben considerar al evaluar si es un punto pivote.
+# Devuelve un valor entero que indica el tipo de punto pivote detectado: 0, 1, 2, 3
+
+def isPivot(candle, window):
+    if candle - window < 0 or candle + window >= len(df):
+        return 0
+
+    pivothigh = 1
+    pivotlow = 2
+    for i in range(candle - window, candle + window + 1):
+        if df.iloc[candle].low > df.iloc[i].low:
+            pivotlow = 0
+        if df.iloc[candle].high < df.iloc[i].high:
+            pivothigh = 0
+    if (pivothigh and pivotlow):
+        return 3
+    elif pivothigh:
+        return pivothigh
+    elif pivotlow:
+        return pivotlow
+    else:
+        return 0
+
+ # Genera un punto elevado desplazado 1e-3 del pivot low y el pivot high
+
+def pointpos(x):
+    if x['isPivot']==2:
+        return x['low']-1e-3
+    elif x['isPivot']==1:
+        return x['high']+1e-3
+    else:
+        return np.nan
 
 ################################################
 st.header('Stock Market Analysis & Predictor')
@@ -549,5 +627,7 @@ for sym, name in dic_symbols.items():
     st.plotly_chart(fig_rent_anual, use_container_width=True)
     st.plotly_chart(fig_rent_mensual, use_container_width=True)
     st.plotly_chart(fig_rent_mensual_prom, use_container_width=True)
+
+
 
 
